@@ -254,24 +254,6 @@ The API and implementation may change as the project evolves.
 
 ---
 
-## Contributing / コントリビュート
-
-Issues, ideas, experiments, benchmarks, bug reports, and pull requests are welcome.
-
-Contributions related to:
-
-* Numerical algorithms
-* Linear algebra
-* Optimization
-* Machine learning
-* Performance
-* M language
-* Tests and examples
-
-are especially welcome.
-
----
-
 ## License / ライセンス
 
 See [LICENSE](LICENSE).
