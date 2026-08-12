@@ -1,12 +1,11 @@
 # Pukutochi
 
-**Numerical computing and machine learning in Power Query (M).**
-
+**Numerical computing, machine learning, geometry, and image processing in Power Query (M).**
 > **Power Query is a perfectly reasonable place for numerical computing.**
 
 > 🇯🇵 **Power Queryは、数値計算を行うのに非常に適した環境です。**
 
-Pukutochi（プクトーチ）は、Power Query / M language向けの数値計算・機械学習ライブラリです。
+Pukutochi（プクトーチ）は、Power Query / M language向けの数値計算・機械学習・3Dジオメトリ・画像処理ライブラリです。
 
 Pukutochi provides reusable building blocks for:
 
@@ -15,6 +14,8 @@ Pukutochi provides reusable building blocks for:
 * Ordinary differential equations
 * Neural networks
 * Numerical optimization and machine learning
+* 3D geometry and STL analysis
+* Image processing
 
 すべてPower Query / Mで実装されています。
 
@@ -44,7 +45,7 @@ The name is just the name.
 
 Basic vector and matrix operations:
 
-```text id="g9yn7e"
+```
 PT_LA_Dot
 PT_LA_MatOp
 PT_LA_MatVec
@@ -77,7 +78,7 @@ PT_Regression_Predict
 
 Fourth-order Runge-Kutta (RK4) solver.
 
-```text id="u9y5d5"
+```
 PT_ODE_RK4Step
 PT_ODE_RK4Solve
 PT_ODE_RK4ToTable
@@ -105,7 +106,7 @@ Supported components include:
 * Classification
 * Regression
 
-```text id="iq3b7e"
+```
 PT_NN_CreateLayer
 PT_NN_Forward
 PT_NN_Backward
@@ -115,13 +116,92 @@ PT_NN_TrainRegression
 
 ---
 
+### 3D Geometry / 3Dジオメトリ
+
+Binary STL files can be read and analyzed directly in Power Query.
+
+```
+PT_Geo_ReadSTL
+PT_Geo_AnalyzeMesh
+PT_Geo_MeshToTable
+PT_Geo_SampleCubeSTL
+```
+
+Current mesh analysis includes:
+
+- Triangle count
+- Vertex count
+- Bounding box
+- Width / Length / Height
+- Surface area
+- Volume
+
+This can be combined with application-specific calculations such as:
+
+```text
+STL
+ ↓
+Mesh
+ ↓
+Geometry Analysis
+ ↓
+Volume
+ ↓
+Weight
+ ↓
+Material Cost
+```
+
+---
+
+### Image Processing / 画像処理
+
+Basic BMP image processing is supported directly in Power Query.
+
+```text
+PT_Img_ReadBMP
+PT_Img_ToGray
+PT_Img_Convolve
+PT_Img_Clamp
+PT_Img_ToTable
+```
+
+Supported BMP formats:
+
+- 24-bit BMP
+- 32-bit BMP
+
+Current operations include:
+
+- RGB pixel extraction
+- Grayscale conversion
+- 2D convolution
+- Value clamping
+- Conversion to Power Query tables
+
+Example:
+
+```text
+BMP
+ ↓
+Read
+ ↓
+Grayscale
+ ↓
+Convolution
+ ↓
+Clamp
+ ↓
+Power Query Table
+```
+
 ## Quick Start / 使い方
 
 ### XOR Classification / XOR分類
 
 A small neural network can learn the XOR function directly in Power Query.
 
-```pq id="g9p5f3"
+```pq
 Dataset =
     {
         [x = {0.0, 0.0}, t = {1.0, 0.0}],
@@ -193,7 +273,7 @@ All computations are performed in Power Query.
 
 ## Project Structure / プロジェクト構成
 
-```text id="qf2g2h"
+```text
 Pukutochi
 │
 ├── PT_LA_*
@@ -205,8 +285,15 @@ Pukutochi
 ├── PT_ODE_*
 │   └── ODE / RK4
 │
-└── PT_NN_*
-    └── Neural Networks
+├── PT_NN_*
+│   └── Neural Networks 
+│
+├── PT_Geo_*
+│   └── 3D Geometry / STL
+│
+└── PT_Img_*
+    └── Image Processing
+
 ```
 
 `PT_` is the function prefix used by Pukutochi.
