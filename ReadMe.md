@@ -354,3 +354,15 @@ See [LICENSE](LICENSE).
 Pukutochi is Pukutochi.
 
 > 🇯🇵 プクトーチは、プクトーチです。
+
+The name may sound like "PyTorch" or "Torch".
+
+But the "tochi" in Pukutochi is **土地** — land.
+
+> **Not Torch. Tochi. 土地です。**
+
+Because in an uncertain world,
+
+> **a torch is nice, but land is better.**
+
+🇯🇵 **不安な世の中には、松明よりも土地。**
