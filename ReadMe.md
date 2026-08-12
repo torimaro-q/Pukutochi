@@ -19,7 +19,14 @@ Pukutochi provides reusable building blocks for:
 
 すべてPower Query / Mで実装されています。
 
----
+|||
+|---|---|
+|![pic1](pic/screen1.png)|
+|![pic2](pic/screen2.png)|![pic3](pic/screen3.png)
+
+
+
+
 
 ## PyTorch?
 
