@@ -1,11 +1,11 @@
-# Pukutochi
+# 🌱Pukutochi
 
-**Numerical computing, machine learning, geometry, and image processing in Power Query (M).**
+**Numerical computing, machine learning, geometry, image processing, and expression evaluation in Power Query (M).**
 > **Power Query is a perfectly reasonable place for numerical computing.**
 
 > 🇯🇵 **Power Queryは、数値計算を行うのに非常に適した環境です。**
 
-Pukutochi（プクトーチ）は、Power Query / M language向けの数値計算・機械学習・3Dジオメトリ・画像処理ライブラリです。
+Pukutochi（プクトーチ）は、Power Query / M language向けの数値計算・機械学習・3Dジオメトリ・画像処理・式評価ライブラリです。
 
 Pukutochi provides reusable building blocks for:
 
@@ -16,6 +16,7 @@ Pukutochi provides reusable building blocks for:
 * Numerical optimization and machine learning
 * 3D geometry and STL analysis
 * Image processing
+* Expression evaluation and API introspection
 
 すべてPower Query / Mで実装されています。
 
@@ -28,7 +29,7 @@ Pukutochi provides reusable building blocks for:
 
 
 
-## PyTorch?
+## 🔥PyTorch?
 
 **No.**
 
@@ -46,9 +47,9 @@ The name is just the name.
 
 ---
 
-## Features / 機能
+## 🧮Features / 機能
 
-### Linear Algebra / 線形代数
+### 📐Linear Algebra / 線形代数
 
 Basic vector and matrix operations:
 
@@ -68,7 +69,7 @@ Includes Cholesky decomposition and triangular system solvers.
 
 ---
 
-### Regression / 回帰
+### 📈Regression / 回帰
 
 Linear regression using the normal equation and Cholesky decomposition.
 
@@ -81,7 +82,7 @@ PT_Regression_Predict
 
 ---
 
-### ODE / 常微分方程式
+### ∫️ ODE / 常微分方程式
 
 Fourth-order Runge-Kutta (RK4) solver.
 
@@ -95,7 +96,7 @@ The included example demonstrates the Lorenz system.
 
 ---
 
-### Neural Networks / ニューラルネットワーク
+### 🧠 Neural Networks / ニューラルネットワーク
 
 A lightweight neural network implementation in M.
 
@@ -123,7 +124,7 @@ PT_NN_TrainRegression
 
 ---
 
-### 3D Geometry / 3Dジオメトリ
+### 🧊 3D Geometry / 3Dジオメトリ
 
 Binary STL files can be read and analyzed directly in Power Query.
 
@@ -161,7 +162,7 @@ Material Cost
 
 ---
 
-### Image Processing / 画像処理
+### 🖼️ Image Processing / 画像処理
 
 Basic BMP image processing is supported directly in Power Query.
 
@@ -202,9 +203,62 @@ Clamp
 Power Query Table
 ```
 
-## Quick Start / 使い方
 
-### XOR Classification / XOR分類
+### 🔤 Expression Engine / 式評価
+
+Pukutochi can expose its public `PT_*` functions through a small
+expression evaluation environment.
+
+```text
+PT_Expression_Registry
+PT_Expression_Evaluate
+PT_Expression_Document
+PT_Expression_TypeName
+```
+
+`PT_Expression_Registry` discovers public Pukutochi functions from
+the Power Query shared environment.
+
+Expressions can then be evaluated from text:
+
+```pq
+PT_Expression_Evaluate(
+    "PT_LA_Dot({1, 2, 3}, {4, 5, 6})"
+)
+```
+
+This returns:
+
+```text
+32
+```
+
+The expression environment is generated from the functions currently
+available to Power Query, rather than maintaining a separate hard-coded
+function list.
+
+### 📚 Function Documentation / API introspection
+
+Pukutochi can also inspect its own public functions:
+
+```pq
+PT_Expression_Document()
+```
+
+The resulting table contains:
+
+- Function name
+- Parameter name
+- Parameter type
+- Return type
+
+This makes it possible to generate a function catalog directly inside
+Power Query.
+
+
+## 🚀 Quick Start / 使い方
+
+### 🧠 XOR Classification / XOR分類
 
 A small neural network can learn the XOR function directly in Power Query.
 
@@ -247,9 +301,7 @@ Training =
 >
 > 🇯🇵 **Power QueryがXORを学習します。**
 
----
-
-## Nonlinear Regression / 非線形回帰
+## 🧠 Nonlinear Regression / 非線形回帰
 
 Neural networks can also be used for nonlinear regression.
 
@@ -258,7 +310,6 @@ Example:
 ```text id="8f4zh4"
 y = sin(x)
 ```
-
 Network:
 
 ```text id="iv0zlw"
@@ -273,12 +324,50 @@ Dense(4 → 4) + Tanh
   ▼
 Dense(4 → 1) + Linear
 ```
-
 All computations are performed in Power Query.
 
----
 
-## Project Structure / プロジェクト構成
+### 🌀 Lorenz System / ローレンツ系
+
+The RK4 example solves the nonlinear Lorenz dynamical system and
+returns the result as a Power Query table.
+
+### 🧊 STL Analysis / STL解析
+
+Binary STL geometry can be processed as:
+
+```text
+STL
+ ↓
+Mesh
+ ↓
+Geometry Analysis
+ ↓
+Volume
+ ↓
+Weight
+ ↓
+Material Cost
+```
+### 🖼️ Image Convolution / 画像畳み込み
+
+BMP images can be processed as:
+
+```text
+BMP
+ ↓
+RGB
+ ↓
+Grayscale
+ ↓
+Convolution
+ ↓
+Clamp
+ ↓
+Table
+```
+
+## 🗂️ Project Structure / プロジェクト構成
 
 ```text
 Pukutochi
@@ -298,16 +387,21 @@ Pukutochi
 ├── PT_Geo_*
 │   └── 3D Geometry / STL
 │
-└── PT_Img_*
-    └── Image Processing
-
+├── PT_Img_*
+│   └── Image Processing
+│
+└── PT_Expression_*
+    └── Expression Evaluation / API Introspection
 ```
 
 `PT_` is the function prefix used by Pukutochi.
 
+The PT_Expression_* functions provide a dynamic registry and
+documentation layer for the public Pukutochi API.
+
 ---
 
-## Why Power Query? / なぜPower Query？
+## 💡 Why Power Query? / なぜPower Query？
 
 Power Query provides:
 
@@ -325,7 +419,7 @@ Pukutochi extends this environment with numerical computing and machine learning
 
 ---
 
-## Limitations / 制限事項
+## ⚠️ Limitations / 制限事項
 
 Pukutochi is designed primarily for experimentation, education, and small-scale analytical workloads.
 
@@ -338,9 +432,13 @@ Pukutochi currently focuses on:
 * Power Query integration
 * Experimentation and learning
 
+The expression evaluation features are intended for controlled
+Pukutochi function composition and experimentation, not as a
+general-purpose scripting environment.
+
 ---
 
-## Status / ステータス
+## 🧪 Status / ステータス
 
 **Experimental / Early Stage**
 
@@ -348,13 +446,13 @@ The API and implementation may change as the project evolves.
 
 ---
 
-## License / ライセンス
+## 📜 License / ライセンス
 
 See [LICENSE](LICENSE).
 
 ---
 
-## Name / 名前
+## 🏷️ Name / 名前
 
 **Pukutochi（プクトーチ）**
 
@@ -366,10 +464,10 @@ The name may sound like "PyTorch" or "Torch".
 
 But the "tochi" in Pukutochi is **土地** — land.
 
-> **Not Torch. Tochi. 土地です。**
+> **Not 🔥Torch. 🌱Tochi. 土地です。**
 
 Because in an uncertain world,
 
 > **a torch is nice, but land is better.**
 
-🇯🇵 **不安な世の中には、松明よりも土地。**
+🇯🇵 **不安な世の中には、🔥松明よりも🌱土地。**
