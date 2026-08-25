@@ -22,8 +22,8 @@ Pukutochi provides reusable building blocks for:
 
 |||
 |---|---|
-|![pic1](pic/screen1.png)|
-|![pic2](pic/screen2.png)|![pic3](pic/screen3.png)
+|![pic1](pic/screen1.png)|![pic4](pic/screen4.gif)|
+|![pic2](pic/screen2.png)|![pic3](pic/screen3.png)|
 
 
 
