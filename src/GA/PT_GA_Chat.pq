@@ -1,67 +1,74 @@
-(message as text, api_key as text, model_name as text, systemPrompt as text, optional interactionId as nullable text) =>
+(message as text, api_key as text, model_name as text, system_prompt as text, optional interaction_id as nullable text) as record =>
 let
-    GyaruPrompt =
-        systemPrompt  & " in a gyaru-like style.",
+    // ============================================================
+    // debug
+    // message        = "what time is it now ?",
+    // api_key        = gemini_key,
+    // model_name     = "gemini-3.5-flash-lite",
+    // system_prompt  = "",
+    // interaction_id = null,
+    // ============================================================
 
-    Body =
-        if interactionId = null then
-            [
-                model = model_name,
-                input = message,
-                system_instruction = GyaruPrompt
-            ]
-        else
-            [
-                model = model_name,
-                input = message,
-                previous_interaction_id = interactionId
-            ],
-
-    Raw =
-        Web.Contents(
-            "https://generativelanguage.googleapis.com",
-            [
-                RelativePath = "v1beta/interactions",
-                Headers = [
-                    #"x-goog-api-key" = api_key,
-                    #"Content-Type" = "application/json"
-                ],
-                Content = Json.FromValue(Body)
-            ]
+    CoreResult =
+        PT_GA_Core(
+            message,
+            api_key,
+            model_name,
+            system_prompt,
+            interaction_id
         ),
 
-    Json =
-        Json.Document(Raw),
+    Response =
+        CoreResult[Response],
 
-    NewInteractionId =
-        Json[id],
-
+    No =
+        CoreResult[#"no."],
+    // ============================================================
     Steps =
-        Json[steps],
-
-    ModelOutput =
-        List.First(
-            List.Select(
-                Steps,
-                each [type] = "model_output"
-            )
+        Record.FieldOrDefault(
+            Response,
+            "steps",
+            {}
         ),
-
-    Content =
-        ModelOutput[content],
-
-    TextContent =
-        List.First(
-            List.Select(
-                Content,
-                each [type] = "text"
-            )
+    TextSteps =
+        List.Select(
+            Steps,
+            each
+                Record.FieldOrDefault(
+                    _,
+                    "type",
+                    null
+                ) = "model_output"
         ),
-
-    Answer =
-        TextContent[text]
+    LastContent =
+        if List.IsEmpty(TextSteps) then
+            {}
+        else
+            Record.FieldOrDefault(
+                List.Last(TextSteps),
+                "content",
+                {}
+            ),
+    LastText =
+        if List.IsEmpty(LastContent) then
+            null
+        else
+            Record.FieldOrDefault(
+                List.First(LastContent),
+                "text",
+                null
+            ),
+    // ============================================================
+    Result =
+        [
+            #"no." = No,
+            output = LastText,
+            InteractionId =
+                Record.FieldOrDefault(
+                    Response,
+                    "id",
+                    null
+                )
+        ]
 in
-    [
-        Answer = Answer,
-        InteractionId = NewInteractionId
-    ]
+    Result
