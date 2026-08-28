@@ -17,17 +17,16 @@ Pukutochi provides reusable building blocks for:
 * 3D geometry and STL analysis
 * Image processing
 * Expression evaluation and API introspection
+* Gemini AI interaction and function calling
 
 すべてPower Query / Mで実装されています。
 
 |||
 |---|---|
-|![pic1](pic/screen1.png)|![pic4](pic/screen4.gif)|
 |![pic2](pic/screen2.png)|![pic3](pic/screen3.png)|
 
-
-
-
+![pic1](pic/screen1.png)
+![pic4](pic/screen4.gif)
 
 ## 🔥PyTorch?
 
@@ -203,6 +202,28 @@ Clamp
 Power Query Table
 ```
 
+### 🔢 Binary Processing
+Pukutochi also contains low-level Binary utilities.
+Available functions:
+
+```text
+PT_Binary_DetectType
+PT_Binary_Read
+PT_Binary_ReadBytes
+```
+
+`PT_Binary_DetectType` can inspect common file signatures including:
+
+```text
+PNG
+JPEG
+BMP
+GIF
+PDF
+ZIP
+GZIP
+RIFF
+```
 
 ### 🔤 Expression Engine / 式評価
 
@@ -255,6 +276,59 @@ The resulting table contains:
 This makes it possible to generate a function catalog directly inside
 Power Query.
 
+### 🤖 Gemini AI / Function Calling
+
+Pukutochi also contains an experimental Gemini interaction layer.
+Available functions:
+
+```text
+PT_GA_Core
+PT_GA_Chat
+PT_GA_ChatEngine
+PT_GA_ExpTools
+```
+
+The implementation uses the Gemini Interactions API and supports:
+
+- Text interaction
+- Stateful interactions
+- previous_interaction_id
+- Tool definitions
+- Function calling
+- Tool execution
+- Recursive tool-call handling
+- Power Query integration
+
+Current built-in example tools include:
+
+- get_current_time
+- PT_LA_Dot
+- calculate
+
+
+The architecture is approximately:
+
+```text
+User Input
+    ↓
+PT_GA_ChatEngine
+    ↓
+PT_GA_Chat
+    ↓
+PT_GA_Core
+    ↓
+Gemini
+    ↓
+Function Call?
+   /     \
+ yes      no
+  ↓        ↓
+Tool      Output
+  ↓
+Result
+  ↓
+Gemini
+```
 
 ## 🚀 Quick Start / 使い方
 
@@ -390,8 +464,14 @@ Pukutochi
 ├── PT_Img_*
 │   └── Image Processing
 │
-└── PT_Expression_*
-    └── Expression Evaluation / API Introspection
+├── PT_Expression_*
+│   └── Expression Evaluation / API Introspection
+│
+├── PT_Binary_*
+│   └── Binary Processing
+│
+└── PT_GA_*
+    └── Gemini AI / Function Calling
 ```
 
 `PT_` is the function prefix used by Pukutochi.
