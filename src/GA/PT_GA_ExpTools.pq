@@ -26,7 +26,7 @@
     ],
 
     [
-        calculate_dot_product =
+        PT_LA_Dot =
             [
                 definition =
                     [
