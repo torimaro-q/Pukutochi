@@ -1,7 +1,7 @@
 () as table =>
 let
     Registry =
-        PT_Expression_Registry,
+        PT_Expression_Registry(),
 
     Names =
         List.Sort(

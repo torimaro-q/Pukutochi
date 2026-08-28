@@ -4,7 +4,7 @@ let
     gyaru_prompt = system_prompt  & " in a gyaru-like style.",
     // ============================================================
     // debug
-    // message        = "what time is it now ?",
+    // message        = "How is the weather in Tokyo today?",
     // api_key        = gemini_key,
     // model_name     = "gemini-3.5-flash",
     // system_prompt  = "", 
@@ -99,13 +99,20 @@ let
                     null
                 ),
 
+            Arguments =
+                Record.FieldOrDefault(
+                    call,
+                    "arguments",
+                    []
+                ),
+
             result =
                 if Tool = null then
                     error
                         "Unknown function: "
                         & call[name]
                 else
-                    Tool[function]()
+                    Tool[function](Arguments)
         in
             result,
     // ============================================================
@@ -184,6 +191,7 @@ let
             message,
             interaction_id
         ),
+    // check = InitialResponse[steps]{1},
     // ============================================================
     FinalResponse =
         RunInteraction(
