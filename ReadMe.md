@@ -441,6 +441,18 @@ Clamp
 Table
 ```
 
+## 📚関連記事 / Related Articles
+
+[PowerQueryで3Dファイルを読み込む](https://qiita.com/torimaro/items/6eeb09d3a28387a0e7d3)
+
+[Power Queryで画像処理](https://qiita.com/torimaro/items/32c86ff4f89c3719c57e)
+
+[Power Queryで混沌としてみた](https://qiita.com/torimaro/items/7fe20a95f503bcb03232)
+
+[Power Queryでニューラルネット](https://qiita.com/torimaro/items/648b89ae83a542c5ff17)
+
+[Power QueryでGeminiちゃん](https://qiita.com/torimaro/items/4f0a3dd7ea4865b45c6f)
+
 ## 🗂️ Project Structure / プロジェクト構成
 
 ```text
