@@ -1,29 +1,7 @@
 () =>
 {
-    [
-        get_current_time =
-            [
-                definition =
-                    [
-                        type = "function",
-                        name = "get_current_time",
-                        description = "Get the current date and time.",
-                        parameters =
-                            [
-                                type = "object",
-                                properties = [],
-                                required = {}
-                            ]
-                    ],
 
-                function =
-                    (arguments as record) =>
-                        DateTimeZone.ToText(
-                            DateTimeZone.FixedUtcNow(),
-                            "yyyy-MM-ddTHH:mm:sszzz"
-                        )
-            ]
-    ],
+
 
     [
         PT_LA_Dot =
@@ -53,13 +31,10 @@
                                     {"u", "v"}
                             ]
                     ],
-
-                function =
-                    (arguments as record) =>
+                function = (arguments as record) =>
                         let
                             U = arguments[u],
                             V = arguments[v],
-                            
                             Result =
                                 PT_LA_Dot(
                                     U,
@@ -77,7 +52,27 @@
                             )
             ]
     ],
-
+    //-------------------------------------------------
+    [
+        get_current_time = [
+                definition = [
+                        type = "function",
+                        name = "get_current_time",
+                        description = "Get the current date and time.",
+                        parameters = [
+                                type = "object",
+                                properties = [],
+                                required = {}
+                            ]
+                    ],
+                function = (arguments as record) =>
+                        DateTimeZone.ToText(
+                            DateTimeZone.FixedUtcNow(),
+                            "yyyy-MM-ddTHH:mm:sszzz"
+                        )
+            ]
+    ],
+    //-------------------------------------------------
     [
         calculate =
             [
@@ -86,46 +81,31 @@
                         type = "function",
                         name = "calculate",
                         description = "Calculate a mathematical expression using two numbers and an operator.",
-                        parameters =
-                            [
+                        parameters = [
                                 type = "object",
-                                properties =
-                                    [
-                                        a =
-                                            [
+                                properties = [
+                                        a = [
                                                 type = "number",
                                                 description = "The first number."
                                             ],
-
-                                        b =
-                                            [
+                                        b = [
                                                 type = "number",
                                                 description = "The second number."
                                             ],
-
-                                        operator =
-                                            [
+                                        operator = [
                                                 type = "string",
                                                 description = "The mathematical operator: add, subtract, multiply, or divide."
                                             ]
                                     ],
-                                required =
-                                    {"a", "b", "operator"}
+                                required = {"a", "b", "operator"}
                             ]
                     ],
-
                 function =
                     (arguments as record) =>
                         let
-                            A =
-                                arguments[a],
-
-                            B =
-                                arguments[b],
-
-                            Operator =
-                                arguments[operator],
-
+                            A = arguments[a],
+                            B = arguments[b],
+                            Operator = arguments[operator],
                             Value =
                                 if Operator = "add" then
                                     A + B
@@ -142,7 +122,6 @@
                                     error
                                         "Unknown operator: "
                                         & Operator,
-
                             Result =
                                 Text.FromBinary(
                                     Json.FromValue(

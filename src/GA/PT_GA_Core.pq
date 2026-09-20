@@ -1,7 +1,5 @@
 (message as text, api_key as text, model_name as text, system_prompt as text, optional interaction_id as nullable text) as record =>
 let
-    MaxSteps = 10,
-    gyaru_prompt = system_prompt  & " in a gyaru-like style.",
     // ============================================================
     // debug
     // message        = "How is the weather in Tokyo today?",
@@ -10,7 +8,10 @@ let
     // system_prompt  = "", 
     // interaction_id = null,
     // ============================================================
+    MaxSteps = 10,
+    gyaru_prompt = system_prompt  & " in a gyaru-like style.",
     ExpTools    = PT_GA_ExpTools(),
+    
     ToolRecords =
         Record.Combine(
             ExpTools
@@ -90,7 +91,7 @@ let
             call,
     // ============================================================
     ExecuteFunction =
-        (call as record) as text =>
+        (call as record) as any =>
         let
             Tool =
                 Record.FieldOrDefault(
@@ -150,9 +151,16 @@ let
     RunInteraction =
         (
             response as record,
-            step as number
+            step as number,
+            optional tool_results as nullable list
         ) as record =>
         let
+            Results =
+                if tool_results = null then
+                    {}
+                else
+                    tool_results,
+
             call =
                 GetFunctionCall(response),
 
@@ -160,18 +168,25 @@ let
                 if call = null then
                     [
                         Response = response,
-                        #"no." = step + 1
+                        #"no." = step + 1,
+                        ToolResults = Results
                     ]
-
                 else if step >= MaxSteps then
                     error
                         "Maximum function calling steps exceeded."
-
                 else
                     let
                         function_result =
                             ExecuteFunction(call),
-
+                        NewResults =
+                            Results & {
+                                [
+                                    step = step,
+                                    name = call[name],
+                                    call_id = call[id],
+                                    result = function_result
+                                ]
+                            },
                         next_response =
                             SendFunctionResult(
                                 response,
@@ -181,7 +196,8 @@ let
                     in
                         @RunInteraction(
                             next_response,
-                            step + 1
+                            step + 1,
+                            NewResults
                         )
         in
             result,
@@ -191,7 +207,6 @@ let
             message,
             interaction_id
         ),
-    // check = InitialResponse[steps]{1},
     // ============================================================
     FinalResponse =
         RunInteraction(

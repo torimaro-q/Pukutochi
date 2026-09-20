@@ -1,7 +1,6 @@
 (message as text, api_key as text, model_name as text, system_prompt as text, optional interaction_id as nullable text) as record =>
 let
     // ============================================================
-    // debug
     // message        = "what time is it now ?",
     // api_key        = gemini_key,
     // model_name     = "gemini-3.5-flash-lite",
@@ -68,7 +67,9 @@ let
                     Response,
                     "id",
                     null
-                )
+                ),
+            ToolResults =
+                CoreResult[ToolResults]
         ]
 in
     Result

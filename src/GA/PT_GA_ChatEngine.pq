@@ -7,6 +7,7 @@ let
     // InputTableName  = "Input",
     // OutputTableName = "Example_GA_Chat",
     // ============================================================
+
     cleanTable =
         (tb) =>
             Table.SelectRows(
@@ -23,6 +24,7 @@ let
     // ============================================================
     // User
     // ============================================================
+
     UserTable =
         try
             Excel.CurrentWorkbook(){[Name = InputTableName]}[Content]
@@ -38,12 +40,13 @@ let
     // ============================================================
     // Response
     // ============================================================
+
     ResponseTable =
         try
             Excel.CurrentWorkbook(){[Name = OutputTableName]}[Content]
         otherwise
             #table(
-                {"no.", "output", "InteractionId"},
+                {"no.", "output", "InteractionId", "ToolResults"},
                 {}
             ),
 
@@ -53,6 +56,7 @@ let
     // ============================================================
     // State
     // ============================================================
+
     UserCount =
         Table.RowCount(RemovedU),
 
@@ -65,6 +69,7 @@ let
     // ============================================================
     // Latest User Message
     // ============================================================
+
     LatestUserMessage =
         if HasPending then
             RemovedU[input]{UserCount - 1}
@@ -74,6 +79,7 @@ let
     // ============================================================
     // Previous Interaction
     // ============================================================
+
     PreviousInteractionId =
         if ResponseCount > 0 then
             RemovedR[InteractionId]{ResponseCount - 1}
@@ -83,6 +89,7 @@ let
     // ============================================================
     // Gemini
     // ============================================================
+
     Gemini =
         if HasPending then
             PT_GA_Chat(
@@ -98,20 +105,41 @@ let
     // ============================================================
     // New Response
     // ============================================================
+
     NewResponse =
         if not HasPending then
             #table(
-                {"no.", "output", "InteractionId"},
+                {"no.", "output", "InteractionId", "ToolResults"},
                 {}
             )
         else
             Table.FromRecords(
-                {Gemini}
+                {
+                    [
+                        #"no." =
+                            Gemini[#"no."],
+
+                        output =
+                            Gemini[output],
+
+                        InteractionId =
+                            Gemini[InteractionId],
+
+                        ToolResults =
+                            Text.FromBinary(
+                                Json.FromValue(
+                                    Gemini[ToolResults]
+                                ),
+                                TextEncoding.Utf8
+                            )
+                    ]
+                }
             ),
 
     // ============================================================
     // Result
     // ============================================================
+
     Result =
         if ResponseCount = 0 then
             NewResponse
