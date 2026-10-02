@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>PQ-GPU Runtime</title>
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: #ddd;
+    font: 14px monospace;
+  }
+
+  #status {
+    padding: 12px;
+    white-space: pre-wrap;
+  }
+
+  canvas {
+    display: none;
+  }
+</style>
+</head>
+
+<body>
+
+<div id="status">PQ-GPU initializing...</div>
+<canvas id="gpu"></canvas>
+
+<script>
+(() => {
+
+  const status = document.getElementById("status");
+  const canvas = document.getElementById("gpu");
+
+  function fail(message) {
+    status.textContent =
+      "PQ-GPU: FAIL\n" + message;
+  }
+
+  /*
+   * ------------------------------------------------------------
+   * Input
+   *
+   * Power QueryからURL query parameterとして渡す。
+   *
+   * ?width=128
+   * &height=128
+   * &steps=10
+   * &shader=...
+   *
+   * ------------------------------------------------------------
+   */
+
+  const params = new URLSearchParams(location.search);
+
+  const width  = Number(params.get("width") || 128);
+  const height = Number(params.get("height") || 128);
+  const steps  = Number(params.get("steps") || 1);
+
+  const defaultShader = `
+precision highp float;
+
+uniform sampler2D state;
+uniform vec2 resolution;
+uniform float time;
+uniform float dt;
+
+void main() {
+
+    vec2 uv = gl_FragCoord.xy / resolution;
+
+    vec4 s = texture2D(state, uv);
+
+    /*
+     * Example:
+     * simple animated field
+     */
+
+    float v =
+        0.5 +
+        0.5 * sin(
+            uv.x * 20.0 +
+            uv.y * 10.0 +
+            time
+        );
+
+    gl_FragColor = vec4(
+        v,
+        s.g,
+        s.b,
+        1.0
+    );
+}
+`;
+
+  const shaderSource =
+    params.get("shader") || defaultShader;
+
+
+  /*
+   * ------------------------------------------------------------
+   * WebGL
+   * ------------------------------------------------------------
+   */
+
+  const gl =
+    canvas.getContext("webgl", {
+      antialias: false,
+      preserveDrawingBuffer: true
+    });
+
+  if (!gl) {
+    fail("WebGL is not available.");
+    return;
+  }
+
+
+  /*
+   * ------------------------------------------------------------
+   * Vertex shader
+   * ------------------------------------------------------------
+   */
+
+  const vertexSource = `
+attribute vec2 position;
+
+void main() {
+    gl_Position =
+        vec4(position, 0.0, 1.0);
+}
+`;
+
+
+  /*
+   * ------------------------------------------------------------
+   * Shader compilation
+   * ------------------------------------------------------------
+   */
+
+  function compileShader(type, source) {
+
+    const shader = gl.createShader(type);
+
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+
+    if (!gl.getShaderParameter(
+        shader,
+        gl.COMPILE_STATUS
+    )) {
+
+      const log =
+        gl.getShaderInfoLog(shader);
+
+      gl.deleteShader(shader);
+
+      throw new Error(log);
+    }
+
+    return shader;
+  }
+
+
+  /*
+   * ------------------------------------------------------------
+   * Program
+   * ------------------------------------------------------------
+   */
+
+  function createProgram(fragmentSource) {
+
+    const vertexShader =
+      compileShader(
+        gl.VERTEX_SHADER,
+        vertexSource
+      );
+
+    const fragmentShader =
+      compileShader(
+        gl.FRAGMENT_SHADER,
+        fragmentSource
+      );
+
+    const program =
+      gl.createProgram();
+
+    gl.attachShader(
+      program,
+      vertexShader
+    );
+
+    gl.attachShader(
+      program,
+      fragmentShader
+    );
+
+    gl.linkProgram(program);
+
+    if (!gl.getProgramParameter(
+        program,
+        gl.LINK_STATUS
+    )) {
+
+      throw new Error(
+        gl.getProgramInfoLog(program)
+      );
+    }
+
+    return program;
+  }
+
+
+  /*
+   * ------------------------------------------------------------
+   * Texture
+   * ------------------------------------------------------------
+   */
+
+  function createTexture(data) {
+
+    const texture =
+      gl.createTexture();
+
+    gl.bindTexture(
+      gl.TEXTURE_2D,
+      texture
+    );
+
+    gl.texParameteri(
+      gl.TEXTURE_2D,
+      gl.TEXTURE_MIN_FILTER,
+      gl.NEAREST
+    );
+
+    gl.texParameteri(
+      gl.TEXTURE_2D,
+      gl.TEXTURE_MAG_FILTER,
+      gl.NEAREST
+    );
+
+    gl.texParameteri(
+      gl.TEXTURE_2D,
+      gl.TEXTURE_WRAP_S,
+      gl.CLAMP_TO_EDGE
+    );
+
+    gl.texParameteri(
+      gl.TEXTURE_2D,
+      gl.TEXTURE_WRAP_T,
+      gl.CLAMP_TO_EDGE
+    );
+
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      width,
+      height,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      data
+    );
+
+    return texture;
+  }
+
+
+  /*
+   * ------------------------------------------------------------
+   * Framebuffer
+   * ------------------------------------------------------------
+   */
+
+  function createFramebuffer(texture) {
+
+    const framebuffer =
+      gl.createFramebuffer();
+
+    gl.bindFramebuffer(
+      gl.FRAMEBUFFER,
+      framebuffer
+    );
+
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      texture,
+      0
+    );
+
+    const result =
+      gl.checkFramebufferStatus(
+        gl.FRAMEBUFFER
+      );
+
+    if (
+      result !== gl.FRAMEBUFFER_COMPLETE
+    ) {
+      throw new Error(
+        "Framebuffer incomplete: " +
+        result
+      );
+    }
+
+    return framebuffer;
+  }
+
+
+  /*
+   * ------------------------------------------------------------
+   * Main
+   * ------------------------------------------------------------
+   */
+
+  try {
+
+    canvas.width = width;
+    canvas.height = height;
+
+    gl.viewport(
+      0,
+      0,
+      width,
+      height
+    );
+
+
+    /*
+     * Fullscreen quad
+     */
+
+    const buffer =
+      gl.createBuffer();
+
+    gl.bindBuffer(
+      gl.ARRAY_BUFFER,
+      buffer
+    );
+
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([
+        -1, -1,
+         1, -1,
+        -1,  1,
+
+        -1,  1,
+         1, -1,
+         1,  1
+      ]),
+      gl.STATIC_DRAW
+    );
+
+
+    /*
+     * Program
+     */
+
+    const program =
+      createProgram(shaderSource);
+
+    gl.useProgram(program);
+
+
+    /*
+     * Attributes
+     */
+
+    const position =
+      gl.getAttribLocation(
+        program,
+        "position"
+      );
+
+    gl.enableVertexAttribArray(
+      position
+    );
+
+    gl.vertexAttribPointer(
+      position,
+      2,
+      gl.FLOAT,
+      false,
+      0,
+      0
+    );
+
+
+    /*
+     * Uniforms
+     */
+
+    const stateLocation =
+      gl.getUniformLocation(
+        program,
+        "state"
+      );
+
+    const resolutionLocation =
+      gl.getUniformLocation(
+        program,
+        "resolution"
+      );
+
+    const timeLocation =
+      gl.getUniformLocation(
+        program,
+        "time"
+      );
+
+    const dtLocation =
+      gl.getUniformLocation(
+        program,
+        "dt"
+      );
+
+
+    /*
+     * Initial state
+     *
+     * RGBA = 0
+     */
+
+    const initial =
+      new Uint8Array(
+        width * height * 4
+      );
+
+    let textureA =
+      createTexture(initial);
+
+    let textureB =
+      createTexture(null);
+
+    let framebufferB =
+      createFramebuffer(textureB);
+
+
+    /*
+     * Uniforms that do not change
+     */
+
+    gl.uniform2f(
+      resolutionLocation,
+      width,
+      height
+    );
+
+    gl.uniform1f(
+      dtLocation,
+      0.01
+    );
+
+
+    /*
+     * --------------------------------------------------------
+     * GPU iteration
+     * --------------------------------------------------------
+     */
+
+    const start =
+      performance.now();
+
+    for (
+      let step = 0;
+      step < steps;
+      step++
+    ) {
+
+      /*
+       * Render into B
+       */
+
+      gl.bindFramebuffer(
+        gl.FRAMEBUFFER,
+        framebufferB
+      );
+
+      gl.viewport(
+        0,
+        0,
+        width,
+        height
+      );
+
+      gl.useProgram(program);
+
+
+      /*
+       * Input texture = A
+       */
+
+      gl.activeTexture(
+        gl.TEXTURE0
+      );
+
+      gl.bindTexture(
+        gl.TEXTURE_2D,
+        textureA
+      );
+
+      gl.uniform1i(
+        stateLocation,
+        0
+      );
+
+      gl.uniform1f(
+        timeLocation,
+        step * 0.01
+      );
+
+
+      /*
+       * GPU computation
+       */
+
+      gl.drawArrays(
+        gl.TRIANGLES,
+        0,
+        6
+      );
+
+
+      /*
+       * Ping-pong
+       */
+
+      const tmp =
+        textureA;
+
+      textureA =
+        textureB;
+
+      textureB =
+        tmp;
+    }
+
+
+    /*
+     * --------------------------------------------------------
+     * Read final state
+     * --------------------------------------------------------
+     */
+
+    /*
+     * textureA now contains final state.
+     */
+
+    const finalFramebuffer =
+      createFramebuffer(textureA);
+
+    gl.bindFramebuffer(
+      gl.FRAMEBUFFER,
+      finalFramebuffer
+    );
+
+    const pixels =
+      new Uint8Array(
+        width *
+        height *
+        4
+      );
+
+    gl.readPixels(
+      0,
+      0,
+      width,
+      height,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      pixels
+    );
+
+
+    gl.finish();
+
+    const elapsed =
+      performance.now() - start;
+
+
+    /*
+     * --------------------------------------------------------
+     * Return data
+     *
+     * IMPORTANT:
+     * WebGL's origin is bottom-left.
+     * Convert to normal top-left coordinates.
+     * --------------------------------------------------------
+     */
+
+    const rows = [];
+
+    for (
+      let y = 0;
+      y < height;
+      y++
+    ) {
+
+      const sourceY =
+        height - 1 - y;
+
+      for (
+        let x = 0;
+        x < width;
+        x++
+      ) {
+
+        const i =
+          (
+            sourceY *
+            width +
+            x
+          ) * 4;
+
+        rows.push({
+          t: steps,
+          x: x,
+          y: y,
+
+          c0: pixels[i]     / 255,
+          c1: pixels[i + 1] / 255,
+          c2: pixels[i + 2] / 255,
+          c3: pixels[i + 3] / 255
+        });
+      }
+    }
+
+
+    /*
+     * Result
+     */
+
+    const result = {
+
+      ok: true,
+
+      backend: "WebGL",
+
+      width,
+      height,
+
+      steps,
+
+      elapsedMs:
+        Number(
+          elapsed.toFixed(3)
+        ),
+
+      rows
+    };
+
+
+    /*
+     * Web.BrowserContents can retrieve
+     * the body text.
+     */
+
+    status.textContent =
+      JSON.stringify(result);
+
+    status.dataset.result =
+      JSON.stringify(result);
+
+
+  } catch (error) {
+
+    fail(
+      error &&
+      error.message
+        ? error.message
+        : String(error)
+    );
+
+  }
+
+})();
+</script>
+
+</body>
+</html>
