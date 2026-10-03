@@ -789,24 +789,20 @@ void main() {
      * ----------------------------------------------------------
      */
 
-    if (resolutionLocation) {
-
-      gl.uniform2f(
-        resolutionLocation,
-        width,
-        height
-      );
+    if (resolutionLocation !== null) {
+        gl.uniform2f(
+            resolutionLocation,
+            width,
+            height
+        );
     }
 
-
-    if (dtLocation) {
-
-      gl.uniform1f(
-        dtLocation,
-        dt
-      );
+    if (dtLocation !== null) {
+        gl.uniform1f(
+            dtLocation,
+            dt
+        );
     }
-
 
     /*
      * ----------------------------------------------------------
@@ -875,23 +871,19 @@ void main() {
       );
 
 
-      if (stateLocation) {
-
-        gl.uniform1i(
-          stateLocation,
-          0
-        );
+      if (stateLocation !== null) {
+          gl.uniform1i(
+              stateLocation,
+              0
+          );
       }
 
-
-      if (timeLocation) {
-
-        gl.uniform1f(
-          timeLocation,
-          time
-        );
+      if (timeLocation !== null) {
+          gl.uniform1f(
+              timeLocation,
+              time
+          );
       }
-
 
       /*
        * GPU calculation
