@@ -1,0 +1,1653 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>PT_GPU Runtime</title>
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #111;
+    color: #ddd;
+    font: 12px monospace;
+}
+#ptgpu-result {
+    white-space: pre-wrap;
+}
+</style>
+</head>
+<body>
+<pre id="ptgpu-result"></pre>
+<canvas
+    id="ptgpu-canvas"
+    width="1"
+    height="1"
+    style="display:none">
+</canvas>
+<script>
+(() => {
+
+"use strict";
+
+
+/* ============================================================
+ * WebGL1
+ * Core model:
+ *   Fields
+ *      ↓
+ *   Pass 0
+ *      ↓
+ *   Fields
+ *      ↓
+ *   Pass 1
+ *      ↓
+ *      ...
+ * Time:
+ *   T
+ *   dt
+ *   steps = ceil(T / dt)
+ * Uniforms:
+ *   Runtime:
+ *      time
+ *      dt
+ *      totalTime
+ *      step
+ *      resolution
+ *      invResolution
+ *   User:
+ *      float
+ *      vec2
+ *      vec3
+ *      vec4
+ * Inputs:
+ *   sampler2D ← Field
+ * Output:
+ *   Field
+ * ============================================================ */
+
+
+/* ============================================================
+ * DOM
+ * ============================================================ */
+const resultElement =
+    document.getElementById(
+        "ptgpu-result"
+    );
+const canvas =
+    document.getElementById(
+        "ptgpu-canvas"
+    );
+/* ============================================================
+ * Output
+ * ============================================================ */
+function output(value) {
+    const json =
+        JSON.stringify(value);
+    resultElement.textContent =
+        json;
+    resultElement.dataset.result =
+        json;
+}
+/* ============================================================
+ * Error
+ * ============================================================ */
+function fail(
+    code,
+    message,
+    details = null
+) {
+    output({
+        ok: false,
+        version: 1,
+        error: {
+            code,
+            message,
+            details
+        }
+    });
+}
+/* ============================================================
+ * Config
+ * ============================================================ */
+let config;
+try {
+    const encoded =
+        new URLSearchParams(
+            location.search
+        ).get("config");
+    if (!encoded) {
+        throw new Error(
+            "Missing config."
+        );
+    }
+    config =
+        JSON.parse(encoded);
+} catch (e) {
+    fail(
+        "CONFIG_PARSE",
+        e.message || String(e)
+    );
+    return;
+}
+/* ============================================================
+ * Config validation
+ * ============================================================ */
+try {
+    if (
+        config.version !== 1
+    ) {
+        throw new Error(
+            "Unsupported config version."
+        );
+    }
+    if (
+        !config.grid ||
+        !Number.isInteger(
+            config.grid.width
+        ) ||
+        !Number.isInteger(
+            config.grid.height
+        ) ||
+        config.grid.width <= 0 ||
+        config.grid.height <= 0
+    ) {
+        throw new Error(
+            "Invalid grid."
+        );
+    }
+    if (
+        !config.time ||
+        !Number.isFinite(
+            config.time.total
+        ) ||
+        !Number.isFinite(
+            config.time.dt
+        ) ||
+        config.time.total < 0 ||
+        config.time.dt <= 0
+    ) {
+        throw new Error(
+            "Invalid time configuration."
+        );
+    }
+    if (
+        !config.fields ||
+        typeof config.fields !== "object" ||
+        Array.isArray(config.fields)
+    ) {
+        throw new Error(
+            "fields must be an object."
+        );
+    }
+    if (
+        !Array.isArray(
+            config.passes
+        )
+    ) {
+        throw new Error(
+            "passes must be an array."
+        );
+    }
+    if (
+        config.uniforms !== undefined &&
+        (
+            config.uniforms === null ||
+            typeof config.uniforms !== "object" ||
+            Array.isArray(config.uniforms)
+        )
+    ) {
+        throw new Error(
+            "uniforms must be an object."
+        );
+    }
+} catch (e) {
+    fail(
+        "CONFIG_INVALID",
+        e.message || String(e)
+    );
+    return;
+}
+/* ============================================================
+ * Grid / Time
+ * ============================================================ */
+const width =
+    config.grid.width;
+const height =
+    config.grid.height;
+const totalTime =
+    config.time.total;
+const dt =
+    config.time.dt;
+/*
+ * Physical timestep count.
+ *
+ * Not part of the public API.
+ */
+const steps =
+    Math.ceil(
+        totalTime / dt
+    );
+/* ============================================================
+ * WebGL1
+ * ============================================================ */
+const gl =
+    canvas.getContext(
+        "webgl",
+        {
+            antialias: false,
+            depth: false,
+            stencil: false,
+            alpha: false,
+            preserveDrawingBuffer: false
+        }
+    );
+if (!gl) {
+    fail(
+        "WEBGL_UNAVAILABLE",
+        "WebGL1 is not available."
+    );
+    return;
+}
+canvas.width =
+    width;
+canvas.height =
+    height;
+/* ============================================================
+ * Runtime uniforms
+ * ============================================================ */
+const RESERVED_UNIFORMS =
+    new Set([
+        "time",
+        "dt",
+        "totalTime",
+        "step",
+        "resolution",
+        "invResolution"
+    ]);
+/* ============================================================
+ * Vertex shader
+ * ============================================================ */
+const vertexSource = `
+attribute vec2 position;
+void main()
+{
+    gl_Position =
+        vec4(position, 0.0, 1.0);
+}
+`;
+/* ============================================================
+ * Fullscreen triangle
+ * ============================================================ */
+const quadBuffer =
+    gl.createBuffer();
+gl.bindBuffer(
+    gl.ARRAY_BUFFER,
+    quadBuffer
+);
+gl.bufferData(
+    gl.ARRAY_BUFFER,
+    new Float32Array([
+        -1, -1,
+         3, -1,
+        -1,  3
+    ]),
+    gl.STATIC_DRAW
+);
+/* ============================================================
+ * Shader compilation
+ * ============================================================ */
+function compileShader(
+    type,
+    source
+) {
+    const shader =
+        gl.createShader(type);
+    if (!shader) {
+        throw new Error(
+            "Unable to create shader."
+        );
+    }
+    gl.shaderSource(
+        shader,
+        source
+    );
+    gl.compileShader(
+        shader
+    );
+    if (
+        !gl.getShaderParameter(
+            shader,
+            gl.COMPILE_STATUS
+        )
+    ) {
+        const log =
+            gl.getShaderInfoLog(
+                shader
+            );
+        gl.deleteShader(
+            shader
+        );
+        throw new Error(
+            log ||
+            "Shader compilation failed."
+        );
+    }
+    return shader;
+}
+/* ============================================================
+ * Program
+ * ============================================================ */
+function createProgram(
+    fragmentSource
+) {
+    const vertexShader =
+        compileShader(
+            gl.VERTEX_SHADER,
+            vertexSource
+        );
+    const fragmentShader =
+        compileShader(
+            gl.FRAGMENT_SHADER,
+            fragmentSource
+        );
+    const program =
+        gl.createProgram();
+    if (!program) {
+        throw new Error(
+            "Unable to create program."
+        );
+    }
+    gl.attachShader(
+        program,
+        vertexShader
+    );
+    gl.attachShader(
+        program,
+        fragmentShader
+    );
+    gl.linkProgram(
+        program
+    );
+    if (
+        !gl.getProgramParameter(
+            program,
+            gl.LINK_STATUS
+        )
+    ) {
+        const log =
+            gl.getProgramInfoLog(
+                program
+            );
+        gl.deleteShader(
+            vertexShader
+        );
+        gl.deleteShader(
+            fragmentShader
+        );
+        gl.deleteProgram(
+            program
+        );
+        throw new Error(
+            log ||
+            "Program link failed."
+        );
+    }
+    gl.deleteShader(
+        vertexShader
+    );
+    gl.deleteShader(
+        fragmentShader
+    );
+    return program;
+}
+/* ============================================================
+ * Texture
+ * ============================================================ */
+function createTexture(
+    data
+) {
+    const texture =
+        gl.createTexture();
+    if (!texture) {
+        throw new Error(
+            "Unable to create texture."
+        );
+    }
+    gl.bindTexture(
+        gl.TEXTURE_2D,
+        texture
+    );
+    gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_MIN_FILTER,
+        gl.NEAREST
+    );
+    gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_MAG_FILTER,
+        gl.NEAREST
+    );
+    gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_WRAP_S,
+        gl.CLAMP_TO_EDGE
+    );
+    gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_WRAP_T,
+        gl.CLAMP_TO_EDGE
+    );
+    gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        width,
+        height,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        data
+    );
+    gl.bindTexture(
+        gl.TEXTURE_2D,
+        null
+    );
+    return texture;
+}
+/* ============================================================
+ * Framebuffer
+ * ============================================================ */
+function createFramebuffer(
+    texture
+) {
+    const framebuffer =
+        gl.createFramebuffer();
+    gl.bindFramebuffer(
+        gl.FRAMEBUFFER,
+        framebuffer
+    );
+    gl.framebufferTexture2D(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D,
+        texture,
+        0
+    );
+    const status =
+        gl.checkFramebufferStatus(
+            gl.FRAMEBUFFER
+        );
+    if (
+        status !==
+        gl.FRAMEBUFFER_COMPLETE
+    ) {
+        gl.deleteFramebuffer(
+            framebuffer
+        );
+        throw new Error(
+            "Framebuffer incomplete: " +
+            status
+        );
+    }
+    gl.bindFramebuffer(
+        gl.FRAMEBUFFER,
+        null
+    );
+    return framebuffer;
+}
+/* ============================================================
+ * Constant field data
+ * ============================================================ */
+function createConstantData(
+    value
+) {
+    if (
+        !Array.isArray(value) ||
+        value.length !== 4
+    ) {
+        throw new Error(
+            "Constant initial value must contain 4 values."
+        );
+    }
+    const rgba =
+        value.map(
+            x => {
+                const n =
+                    Number(x);
+                if (
+                    !Number.isFinite(n)
+                ) {
+                    throw new Error(
+                        "Invalid constant initial value."
+                    );
+                }
+                return Math.round(
+                    Math.max(
+                        0,
+                        Math.min(
+                            1,
+                            n
+                        )
+                    ) * 255
+                );
+            }
+        );
+    const data =
+        new Uint8Array(
+            width *
+            height *
+            4
+        );
+    for (
+        let i = 0;
+        i < width * height;
+        i++
+    ) {
+        const p =
+            i * 4;
+        data[p + 0] =
+            rgba[0];
+
+        data[p + 1] =
+            rgba[1];
+
+        data[p + 2] =
+            rgba[2];
+
+        data[p + 3] =
+            rgba[3];
+    }
+    return data;
+}
+/* ============================================================
+ * Uniform setter
+ * ============================================================ */
+function setUniform(
+    program,
+    name,
+    value
+) {
+    const location =
+        gl.getUniformLocation(
+            program,
+            name
+        );
+    /*
+     * GLSL may optimize unused uniforms.
+     */
+    if (location === null) {
+        return;
+    }
+    if (
+        typeof value === "number"
+    ) {
+        if (
+            !Number.isFinite(value)
+        ) {
+            throw new Error(
+                "Uniform '" +
+                name +
+                "' contains a non-finite number."
+            );
+        }
+        gl.uniform1f(
+            location,
+            value
+        );
+        return;
+    }
+    if (
+        Array.isArray(value)
+    ) {
+        for (
+            const x of value
+        ) {
+            if (
+                typeof x !== "number" ||
+                !Number.isFinite(x)
+            ) {
+                throw new Error(
+                    "Uniform '" +
+                    name +
+                    "' contains an invalid value."
+                );
+            }
+        }
+        switch (
+            value.length
+        ) {
+
+            case 1:
+
+                gl.uniform1f(
+                    location,
+                    value[0]
+                );
+
+                return;
+
+            case 2:
+
+                gl.uniform2f(
+                    location,
+                    value[0],
+                    value[1]
+                );
+
+                return;
+
+            case 3:
+
+                gl.uniform3f(
+                    location,
+                    value[0],
+                    value[1],
+                    value[2]
+                );
+
+                return;
+
+            case 4:
+
+                gl.uniform4f(
+                    location,
+                    value[0],
+                    value[1],
+                    value[2],
+                    value[3]
+                );
+
+                return;
+
+            default:
+
+                throw new Error(
+                    "Unsupported uniform array length for '" +
+                    name +
+                    "': " +
+                    value.length
+                );
+        }
+    }
+    throw new Error(
+        "Unsupported uniform type for '" +
+        name +
+        "'."
+    );
+}
+/* ============================================================
+ * Runtime uniforms
+ * ============================================================ */
+function setRuntimeUniforms(
+    program,
+    time,
+    step
+) {
+
+    setUniform(
+        program,
+        "time",
+        time
+    );
+
+    setUniform(
+        program,
+        "dt",
+        dt
+    );
+
+    setUniform(
+        program,
+        "totalTime",
+        totalTime
+    );
+
+    setUniform(
+        program,
+        "step",
+        step
+    );
+
+    setUniform(
+        program,
+        "resolution",
+        [width, height]
+    );
+
+    setUniform(
+        program,
+        "invResolution",
+        [
+            1 / width,
+            1 / height
+        ]
+    );
+}
+/* ============================================================
+ * User uniforms
+ * ============================================================ */
+function setUserUniforms(
+    program
+) {
+
+    const uniforms =
+        config.uniforms || {};
+
+
+    for (
+        const name of
+        Object.keys(uniforms)
+    ) {
+
+        if (
+            RESERVED_UNIFORMS.has(name)
+        ) {
+
+            throw new Error(
+                "User uniform uses reserved name: " +
+                name
+            );
+        }
+
+
+        setUniform(
+            program,
+            name,
+            uniforms[name]
+        );
+    }
+}
+/* ============================================================
+ * Sampler
+ * ============================================================ */
+function setSampler(
+    program,
+    name,
+    unit
+) {
+
+    const location =
+        gl.getUniformLocation(
+            program,
+            name
+        );
+
+
+    if (location === null) {
+        return;
+    }
+
+
+    gl.uniform1i(
+        location,
+        unit
+    );
+}
+/* ============================================================
+ * Field
+ * ============================================================ */
+class Field {
+    constructor(
+        name,
+        definition
+    ) {
+        this.name =
+            name;
+
+        this.read =
+            null;
+
+        this.write =
+            null;
+
+        this.readFramebuffer =
+            null;
+
+        this.writeFramebuffer =
+            null;
+
+
+        this.initialize(
+            definition
+        );
+    }
+
+    initialize(
+        definition
+    ) {
+
+        const initial =
+            definition &&
+            definition.initial
+                ? definition.initial
+                : {
+                    type: "constant",
+                    value: [0, 0, 0, 1]
+                };
+
+        /*
+         * ------------------------------------------------------
+         * Constant
+         * ------------------------------------------------------
+         */
+
+        if (
+            initial.type ===
+            "constant"
+        ) {
+
+            this.read =
+                createTexture(
+                    createConstantData(
+                        initial.value ||
+                        [0, 0, 0, 1]
+                    )
+                );
+        }
+
+        /*
+         * ------------------------------------------------------
+         * Shader initializer
+         * ------------------------------------------------------
+         */
+
+        else if (
+            initial.type ===
+            "shader"
+        ) {
+
+            if (
+                typeof initial.source !==
+                "string"
+            ) {
+
+                throw new Error(
+                    "Shader initializer requires source."
+                );
+            }
+
+
+            this.read =
+                createTexture(
+                    null
+                );
+
+
+            const framebuffer =
+                createFramebuffer(
+                    this.read
+                );
+
+
+            const program =
+                createProgram(
+                    initial.source
+                );
+
+
+            draw(
+                program,
+                framebuffer,
+                {},
+                0,
+                0
+            );
+
+
+            gl.deleteProgram(
+                program
+            );
+
+            gl.deleteFramebuffer(
+                framebuffer
+            );
+        }
+        else {
+            throw new Error(
+                "Unknown initial type: " +
+                initial.type
+            );
+        }
+
+        /*
+         * ------------------------------------------------------
+         * Ping-pong target
+         * ------------------------------------------------------
+         */
+
+        this.write =
+            createTexture(
+                null
+            );
+
+        this.readFramebuffer =
+            createFramebuffer(
+                this.read
+            );
+
+        this.writeFramebuffer =
+            createFramebuffer(
+                this.write
+            );
+    }
+
+
+    swap() {
+
+        const texture =
+            this.read;
+
+        this.read =
+            this.write;
+
+        this.write =
+            texture;
+
+
+        const framebuffer =
+            this.readFramebuffer;
+
+        this.readFramebuffer =
+            this.writeFramebuffer;
+
+        this.writeFramebuffer =
+            framebuffer;
+    }
+
+
+    destroy() {
+
+        if (this.read) {
+            gl.deleteTexture(
+                this.read
+            );
+        }
+
+        if (this.write) {
+            gl.deleteTexture(
+                this.write
+            );
+        }
+
+        if (this.readFramebuffer) {
+            gl.deleteFramebuffer(
+                this.readFramebuffer
+            );
+        }
+
+        if (this.writeFramebuffer) {
+            gl.deleteFramebuffer(
+                this.writeFramebuffer
+            );
+        }
+    }
+}
+
+
+/* ============================================================
+ * Draw pass
+ * ============================================================ */
+
+function draw(
+    program,
+    framebuffer,
+    inputs,
+    time,
+    step
+) {
+
+    gl.bindFramebuffer(
+        gl.FRAMEBUFFER,
+        framebuffer
+    );
+
+
+    gl.viewport(
+        0,
+        0,
+        width,
+        height
+    );
+
+
+    gl.useProgram(
+        program
+    );
+
+
+    /*
+     * ----------------------------------------------------------
+     * Position
+     * ----------------------------------------------------------
+     */
+
+    const position =
+        gl.getAttribLocation(
+            program,
+            "position"
+        );
+
+
+    if (position < 0) {
+
+        throw new Error(
+            "Shader requires attribute: position"
+        );
+    }
+
+
+    gl.bindBuffer(
+        gl.ARRAY_BUFFER,
+        quadBuffer
+    );
+
+
+    gl.enableVertexAttribArray(
+        position
+    );
+
+
+    gl.vertexAttribPointer(
+        position,
+        2,
+        gl.FLOAT,
+        false,
+        0,
+        0
+    );
+
+
+    /*
+     * ----------------------------------------------------------
+     * Runtime uniforms
+     * ----------------------------------------------------------
+     */
+
+    setRuntimeUniforms(
+        program,
+        time,
+        step
+    );
+
+
+    /*
+     * ----------------------------------------------------------
+     * User uniforms
+     * ----------------------------------------------------------
+     */
+
+    setUserUniforms(
+        program
+    );
+
+    /*
+     * ----------------------------------------------------------
+     * Field inputs
+     *
+     * Each input becomes one sampler2D.
+     *
+     * Example:
+     *
+     * inputs = {
+     *     velocity: "velocity",
+     *     density:  "density"
+     * }
+     *
+     * shader:
+     *
+     * uniform sampler2D velocity;
+     * uniform sampler2D density;
+     * ----------------------------------------------------------
+     */
+    let textureUnit = 0;
+
+    for (
+        const uniformName of
+        Object.keys(inputs || {})
+    ) {
+
+        const fieldName =
+            inputs[
+                uniformName
+            ];
+
+
+        const field =
+            fields[fieldName];
+
+
+        if (!field) {
+
+            throw new Error(
+                "Unknown input field '" +
+                fieldName +
+                "' for sampler '" +
+                uniformName +
+                "'."
+            );
+        }
+
+
+        if (
+            textureUnit >=
+            gl.getParameter(
+                gl.MAX_TEXTURE_IMAGE_UNITS
+            )
+        ) {
+
+            throw new Error(
+                "Too many texture inputs for pass."
+            );
+        }
+
+
+        gl.activeTexture(
+            gl.TEXTURE0 +
+            textureUnit
+        );
+
+
+        gl.bindTexture(
+            gl.TEXTURE_2D,
+            field.read
+        );
+
+
+        setSampler(
+            program,
+            uniformName,
+            textureUnit
+        );
+
+        textureUnit++;
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * Execute
+     * ----------------------------------------------------------
+     */
+
+    gl.drawArrays(
+        gl.TRIANGLES,
+        0,
+        3
+    );
+
+    /*
+     * ----------------------------------------------------------
+     * Cleanup bindings
+     * ----------------------------------------------------------
+     */
+
+    for (
+        let i = 0;
+        i < textureUnit;
+        i++
+    ) {
+
+        gl.activeTexture(
+            gl.TEXTURE0 + i
+        );
+
+        gl.bindTexture(
+            gl.TEXTURE_2D,
+            null
+        );
+    }
+
+
+    gl.bindFramebuffer(
+        gl.FRAMEBUFFER,
+        null
+    );
+}
+
+
+/* ============================================================
+ * Runtime
+ * ============================================================ */
+const fields = {};
+const programs = [];
+const passRecords = [];
+
+try {
+
+    /* ---------------------------------------------------------
+     * Create fields
+     * --------------------------------------------------------- */
+
+    for (
+        const name of
+        Object.keys(
+            config.fields
+        )
+    ) {
+
+        fields[name] =
+            new Field(
+                name,
+                config.fields[name]
+            );
+    }
+
+
+    /* ---------------------------------------------------------
+     * Create pass programs
+     * --------------------------------------------------------- */
+
+    const passes =
+        config.passes.map(
+            (definition, index) => {
+
+                if (
+                    !definition ||
+                    typeof definition.shader !==
+                    "string"
+                ) {
+
+                    throw new Error(
+                        "Pass " +
+                        index +
+                        " requires shader source."
+                    );
+                }
+
+
+                if (
+                    typeof definition.output !==
+                    "string"
+                ) {
+
+                    throw new Error(
+                        "Pass " +
+                        index +
+                        " requires output field."
+                    );
+                }
+
+
+                const outputField =
+                    fields[
+                        definition.output
+                    ];
+
+
+                if (!outputField) {
+
+                    throw new Error(
+                        "Pass " +
+                        index +
+                        " references unknown output field: " +
+                        definition.output
+                    );
+                }
+
+
+                const inputs =
+                    definition.inputs ||
+                    {};
+
+
+                if (
+                    typeof inputs !== "object" ||
+                    Array.isArray(inputs)
+                ) {
+
+                    throw new Error(
+                        "Pass " +
+                        index +
+                        " inputs must be an object."
+                    );
+                }
+
+                for (
+                    const samplerName of
+                    Object.keys(inputs)
+                ) {
+
+                    const fieldName =
+                        inputs[
+                            samplerName
+                        ];
+
+
+                    if (
+                        typeof fieldName !==
+                        "string"
+                    ) {
+
+                        throw new Error(
+                            "Pass " +
+                            index +
+                            " input '" +
+                            samplerName +
+                            "' must reference a field name."
+                        );
+                    }
+
+
+                    if (
+                        !fields[fieldName]
+                    ) {
+
+                        throw new Error(
+                            "Pass " +
+                            index +
+                            " references unknown input field: " +
+                            fieldName
+                        );
+                    }
+                }
+
+
+                const program =
+                    createProgram(
+                        definition.shader
+                    );
+
+
+                programs.push(
+                    program
+                );
+
+
+                const record = {
+                    index,
+                    name:
+                        definition.name ||
+                        ("pass" + index),
+                    definition,
+                    program
+                };
+
+
+                passRecords.push(
+                    record
+                );
+
+
+                return record;
+            }
+        );
+
+
+    /* ---------------------------------------------------------
+     * Simulation
+     * --------------------------------------------------------- */
+
+    const start =
+        performance.now();
+
+    for (
+        let step = 0;
+        step < steps;
+        step++
+    ) {
+
+        const time =
+            Math.min(
+                step * dt,
+                totalTime
+            );
+
+        for (
+            const pass of passes
+        ) {
+
+            const definition =
+                pass.definition;
+
+
+            const outputField =
+                fields[
+                    definition.output
+                ];
+
+            draw(
+                pass.program,
+                outputField.writeFramebuffer,
+                definition.inputs || {},
+                time,
+                step
+            );
+
+            outputField.swap();
+        }
+    }
+
+
+    /* ---------------------------------------------------------
+     * Output field
+     * --------------------------------------------------------- */
+
+    if (
+        !config.output ||
+        typeof config.output.field !==
+        "string"
+    ) {
+
+        throw new Error(
+            "Output field is not specified."
+        );
+    }
+
+
+    const outputField =
+        fields[
+            config.output.field
+        ];
+
+
+    if (!outputField) {
+
+        throw new Error(
+            "Unknown output field: " +
+            config.output.field
+        );
+    }
+
+
+    /* ---------------------------------------------------------
+     * Read final state
+     * --------------------------------------------------------- */
+
+    gl.bindFramebuffer(
+        gl.FRAMEBUFFER,
+        outputField.readFramebuffer
+    );
+
+
+    const pixels =
+        new Uint8Array(
+            width *
+            height *
+            4
+        );
+
+
+    gl.readPixels(
+        0,
+        0,
+        width,
+        height,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        pixels
+    );
+
+
+    gl.finish();
+
+
+    const elapsed =
+        performance.now() -
+        start;
+
+
+    /* ---------------------------------------------------------
+     * Convert to rows
+     * --------------------------------------------------------- */
+
+    const rows = [];
+
+
+    for (
+        let y = 0;
+        y < height;
+        y++
+    ) {
+
+        const sourceY =
+            height -
+            1 -
+            y;
+
+
+        for (
+            let x = 0;
+            x < width;
+            x++
+        ) {
+
+            const i =
+                (
+                    sourceY *
+                    width +
+                    x
+                ) * 4;
+
+
+            rows.push({
+
+                t:
+                    totalTime,
+
+                x,
+                y,
+
+                c0:
+                    pixels[i] / 255,
+
+                c1:
+                    pixels[i + 1] / 255,
+
+                c2:
+                    pixels[i + 2] / 255,
+
+                c3:
+                    pixels[i + 3] / 255
+            });
+        }
+    }
+
+
+    /* ---------------------------------------------------------
+     * Result
+     * --------------------------------------------------------- */
+
+    output({
+
+        ok: true,
+
+        version: 1,
+
+        backend:
+            "WebGL1",
+
+        grid: {
+            width,
+            height
+        },
+
+        time: {
+            total:
+                totalTime,
+
+            dt,
+
+            steps
+        },
+
+        passes:
+            passRecords.map(
+                p => ({
+                    name: p.name,
+                    index: p.index
+                })
+            ),
+
+        elapsedMs:
+            Number(
+                elapsed.toFixed(3)
+            ),
+
+        rows
+    });
+
+
+    /* ---------------------------------------------------------
+     * Cleanup
+     * --------------------------------------------------------- */
+
+    for (
+        const name of
+        Object.keys(fields)
+    ) {
+
+        fields[name].destroy();
+    }
+
+
+    for (
+        const program of
+        programs
+    ) {
+
+        gl.deleteProgram(
+            program
+        );
+    }
+
+
+} catch (e) {
+
+    for (
+        const name of
+        Object.keys(fields)
+    ) {
+
+        try {
+            fields[name].destroy();
+        } catch (_) {}
+    }
+
+
+    for (
+        const program of
+        programs
+    ) {
+
+        try {
+            gl.deleteProgram(
+                program
+            );
+        } catch (_) {}
+    }
+
+
+    fail(
+        "RUNTIME",
+        e.message || String(e),
+        {
+            stack:
+                e.stack || null
+        }
+    );
+}
+
+})();
+</script>
+
+</body>
+</html>
