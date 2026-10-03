@@ -12,45 +12,52 @@ Pukutochi（プクトーチ）は、Power Query / M language向けの数値計�
 Pukutochi provides reusable building blocks for:
 
 <table>
-  <tr>
-    <td align="center" width="30%">
-      <sub>Neural networks</sub>
+    <td align="center" width="25%">
+      Gemini AI interaction and function calling
     </td>
-    <td align="center" width="70%">
+    <td align="center" width="75%">
+      <img src="pic/screen4.gif" width="100%">
+      </sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="25%">
+      GPU-accelerated GLSL simulation
+    </td>
+    <td align="center" width="75%">
+      <img src="pic/screen5.png" width="100%">
+      </sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="25%">
+      Neural networks
+    </td>
+    <td align="center" width="75%">
       <img src="pic/screen1.png" width="100%">
       </sub>
     </td>
   </tr>
   <tr>
-    <td align="center" width="30%">
-      <sub>Image processing</sub>
+    <td align="center" width="25%">
+      Image processing
     </td>
-    <td align="center" width="70%">
+    <td align="center" width="75%">
       <img src="pic/screen2.png" width="100%">
       </sub>
     </td>
   </tr>
   <tr>
-    <td align="center" width="30%">
-      <sub>Ordinary differential equations</sub>
+    <td align="center" width="25%">
+      Ordinary differential equations
     </td>
-    <td align="center" width="70%">
+    <td align="center" width="75%">
       <img src="pic/screen3.png" width="100%">
       </sub>
     </td>
   </tr>
   <tr>
-    <td align="center" width="30%">
-      <sub>Gemini AI interaction and function calling</sub>
-    </td>
-    <td align="center" width="70%">
-      <img src="pic/screen4.gif" width="100%">
-      </sub>
-    </td>
-  </tr>
 </table>
-
----
 
 * Linear algebra
 * Regression
@@ -58,7 +65,6 @@ Pukutochi provides reusable building blocks for:
 * 3D geometry and STL analysis
 * Expression evaluation and API introspection
 * Gemini AI interaction and function calling
-* GPU-accelerated GLSL simulation
 
 すべてPower Query / Mで実装されています。
 
