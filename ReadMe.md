@@ -5,28 +5,62 @@
 
 > 🇯🇵 **Power Queryは、数値計算を行うのに非常に適した環境です。**
 
+---
+
 Pukutochi（プクトーチ）は、Power Query / M language向けの数値計算・機械学習・3Dジオメトリ・画像処理・式評価ライブラリです。
 
 Pukutochi provides reusable building blocks for:
 
+<table>
+  <tr>
+    <td align="center" width="30%">
+      <sub>Neural networks</sub>
+    </td>
+    <td align="center" width="70%">
+      <img src="pic/screen1.png" width="100%">
+      </sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="30%">
+      <sub>Image processing</sub>
+    </td>
+    <td align="center" width="70%">
+      <img src="pic/screen2.png" width="100%">
+      </sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="30%">
+      <sub>Ordinary differential equations</sub>
+    </td>
+    <td align="center" width="70%">
+      <img src="pic/screen3.png" width="100%">
+      </sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="30%">
+      <sub>Gemini AI interaction and function calling</sub>
+    </td>
+    <td align="center" width="70%">
+      <img src="pic/screen4.gif" width="100%">
+      </sub>
+    </td>
+  </tr>
+</table>
+
+---
+
 * Linear algebra
 * Regression
-* Ordinary differential equations
-* Neural networks
 * Numerical optimization and machine learning
 * 3D geometry and STL analysis
-* Image processing
 * Expression evaluation and API introspection
 * Gemini AI interaction and function calling
+* GPU-accelerated GLSL simulation
 
 すべてPower Query / Mで実装されています。
-
-|||
-|---|---|
-|![pic2](pic/screen2.png)|![pic3](pic/screen3.png)|
-
-![pic1](pic/screen1.png)
-![pic4](pic/screen4.gif)
 
 ## 🔥PyTorch?
 
