@@ -1,11 +1,13 @@
 (ApiKey as text, Model as text, SystemPrompt as text, InputTableName as text, OutputTableName as text) =>
 let
     // ============================================================
-    // ApiKey          = gemini_key,
-    // Model           = "gemini-3.5-flash",
-    // SystemPrompt    = "",
-    // InputTableName  = "Input",
-    // OutputTableName = "Example_GA_Chat",
+    /*
+    ApiKey          = gemini_key,
+    Model           = "gemini-3.5-flash",
+    SystemPrompt    = "",
+    InputTableName  = "Input",
+    OutputTableName = "Example_GA_Chat",
+    */
     // ============================================================
 
     cleanTable =
