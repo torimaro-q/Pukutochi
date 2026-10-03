@@ -1,6 +1,5 @@
-export.bat
-import.bat
-PT_Transfer.ps1
+*.bat
+*.ps1
 empty.xlsx
-export.pqxml
-source.xlsm
+*.pqxml
+*.xlsm
